@@ -57,29 +57,60 @@ The bot supports multiple servers (e.g., Exiled Lands and Isle of Siptah) and po
     - In Discord, go to `User Settings` > `Advanced` and enable `Developer Mode`.
     - Right-click on the desired text channel and select `Copy Channel ID`.
 
-## Running the Bot
+## Running the Bot as a Systemd Service (Recommended)
 
-After configuring, you can start the bot with the following command:
+To ensure the bot runs continuously, starts on boot, and restarts automatically if it crashes, setting it up as a `systemd` service is the recommended method.
 
-```bash
-python3 killfeed_bot.py
-```
+1.  **Create a Service File**
 
-To keep the bot running 24/7, it is highly recommended to run it in a persistent terminal session using tools like `screen` or `tmux`.
+    Create a file named `killfeed.service` in `/etc/systemd/system/` using a text editor like `nano`:
+    ```bash
+    sudo nano /etc/systemd/system/killfeed.service
+    ```
 
-### Example with `screen`:
+2.  **Add the Service Configuration**
 
-```bash
-# Starts a new session named 'killfeed'
-screen -S killfeed
+    Paste the following content into the file. You **must** change `User`, `Group`, and the paths to match your specific setup.
 
-# Starts the bot inside the session
-python3 killfeed_bot.py
+    ```ini
+    [Unit]
+    Description=Conan Exiles Killfeed Bot
+    After=network.target
 
-# To detach from the session without stopping the bot, press Ctrl+A and then D.
-# To return to the session, use:
-screen -r killfeed
-```
+    [Service]
+    # Change these to the user/group that should run the bot
+    User=steam
+    Group=steam
+
+    # Change this to the absolute path of your bot's directory
+    WorkingDirectory=/home/steam/bots/Killfeed
+
+    # Command to start the bot
+    ExecStart=/usr/bin/python3 -u killfeed_bot.py
+
+    # Restart policy
+    Restart=always
+    RestartSec=5
+
+    [Install]
+    WantedBy=multi-user.target
+    ```
+
+3.  **Enable and Start the Service**
+
+    After saving the file, reload the `systemd` daemon, enable the service to start on boot, and then start it immediately.
+    ```bash
+    sudo systemctl daemon-reload
+    sudo systemctl enable killfeed.service
+    sudo systemctl start killfeed.service
+    ```
+
+4.  **Check the Status**
+
+    You can check if the bot is running correctly and see its latest logs with:
+    ```bash
+    sudo systemctl status killfeed.service
+    ```
 
 ## How It Works
 
