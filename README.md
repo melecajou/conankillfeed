@@ -28,9 +28,20 @@ The bot supports multiple servers (e.g., Exiled Lands and Isle of Siptah) and po
     cd conankillfeed
     ```
 
-2.  **Install Dependencies**
+2.  **Create a Virtual Environment & Install Dependencies**
+    It's highly recommended to run the bot in a Python virtual environment.
+
     ```bash
+    # Create a virtual environment named 'venv'
+    python3 -m venv venv
+
+    # Activate the environment
+    source venv/bin/activate
+
+    # Install the required library
     pip install discord.py
+
+    # To deactivate later, simply type 'deactivate'
     ```
 
 3.  **Create the Configuration File**
@@ -78,19 +89,18 @@ To ensure the bot runs continuously, starts on boot, and restarts automatically 
     After=network.target
 
     [Service]
-    # Change these to the user/group that should run the bot
+    # Change this to the user/group that should run the bot
     User=steam
-    Group=steam
 
     # Change this to the absolute path of your bot's directory
     WorkingDirectory=/home/steam/bots/Killfeed
 
-    # Command to start the bot
-    ExecStart=/usr/bin/python3 -u killfeed_bot.py
+    # Command to start the bot using the python from the virtual environment
+    ExecStart=/home/steam/bots/Killfeed/venv/bin/python3 -u killfeed_bot.py
 
     # Restart policy
-    Restart=always
-    RestartSec=5
+    Restart=on-failure
+    RestartSec=5s
 
     [Install]
     WantedBy=multi-user.target
