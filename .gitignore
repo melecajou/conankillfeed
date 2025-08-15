@@ -1,5 +1,8 @@
-# Configuration files
+# Configuration files - DO NOT COMMIT
 config.py
+
+# Python virtual environment
+venv/
 
 # Database files
 

@@ -1,5 +1,7 @@
-# Para o Bot de Killfeed (killfeed_bot.py)
+# Killfeed Bot Configuration (killfeed_bot.py)
 KILLFEED_BOT_TOKEN = "YOUR_DISCORD_BOT_TOKEN_HERE"
+
+# --- Channel and Path Settings ---
 KILLFEED_CHANNEL_ID = 123456789012345678
 SIPTAH_KILLFEED_CHANEL_ID = 123456789012345678
 CONAN_SAVED_PATH = "/path/to/your/conan/saved/folder/"
@@ -8,5 +10,10 @@ LAST_EVENT_TIME_FILE = "/path/to/your/last_event_time.txt"
 SIPTAH_LAST_EVENT_TIME_FILE = "/path/to/your/siptah_last_event_time.txt"
 SPAWNS_DB_PATH = "/path/to/your/spawns.db"
 
+# --- Bot Behavior Settings ---
 # Set to True to only post player vs. player deaths, False to post all deaths (PvP and PvE)
 PVP_ONLY_DEATHS = False
+
+# How often (in seconds) to check for new kills on each server
+EXILED_LANDS_POLL_INTERVAL = 20
+SIPTAH_POLL_INTERVAL = 25
