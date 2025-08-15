@@ -7,3 +7,6 @@ SIPTAH_SAVED_PATH = "/path/to/your/siptah/saved/folder/"
 LAST_EVENT_TIME_FILE = "/path/to/your/last_event_time.txt"
 SIPTAH_LAST_EVENT_TIME_FILE = "/path/to/your/siptah_last_event_time.txt"
 SPAWNS_DB_PATH = "/path/to/your/spawns.db"
+
+# Set to True to only post player vs. player deaths, False to post all deaths (PvP and PvE)
+PVP_ONLY_DEATHS = False
