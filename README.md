@@ -51,6 +51,7 @@ The bot supports multiple servers (e.g., Exiled Lands and Isle of Siptah) and po
     - `LAST_EVENT_TIME_FILE`: Path to the file that stores the timestamp of the last read event for the main server. You can leave the default.
     - `SIPTAH_LAST_EVENT_TIME_FILE`: Path to the timestamp file for the Siptah server. You can leave the default.
     - `SPAWNS_DB_PATH`: Path to the `spawns.db` database. This file is required to identify NPCs.
+    - `PVP_ONLY_DEATHS`: Set to `True` to only post player vs. player deaths, or `False` to post all deaths (PvP and PvE).
 
     **How to get a Discord Channel ID:**
     - In Discord, go to `User Settings` > `Advanced` and enable `Developer Mode`.

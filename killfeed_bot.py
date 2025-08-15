@@ -74,6 +74,10 @@ async def process_server_kills(channel_id, saved_path, db_pattern, last_event_fi
         for row in cur.execute(query, (last_time,)):
             event_time, killer_name, victim_name, non_persistent_causer = row
 
+            # If PvP only is enabled, skip events where there is no player killer
+            if config.PVP_ONLY_DEATHS and not killer_name:
+                continue
+
             if killer_name:
                 message = f"💀 **{killer_name}** eliminou **{victim_name}**!"
             else:
