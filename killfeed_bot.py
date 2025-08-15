@@ -6,6 +6,9 @@ import glob
 from datetime import datetime
 import config
 
+# --- Constants ---
+DEATH_EVENT_TYPE = 103
+
 # --- Intents and Bot Initialization ---
 intents = discord.Intents.default()
 intents.message_content = True
@@ -39,7 +42,7 @@ async def process_server_kills(channel_id, saved_path, db_pattern, last_event_fi
     """
     killfeed_channel = bot.get_channel(channel_id)
     if not killfeed_channel:
-        print(f"ERRO [{server_name}]: Canal de Killfeed com ID {channel_id} não encontrado.")
+        print(f"ERROR [{server_name}]: Killfeed channel with ID {channel_id} not found.")
         return
 
     db_path = find_latest_db_backup(saved_path, db_pattern)
@@ -55,9 +58,9 @@ async def process_server_kills(channel_id, saved_path, db_pattern, last_event_fi
         cur = con.cursor()
 
         # Attach the shared spawns database
-        cur.execute(f"ATTACH DATABASE '{config.SPAWNS_DB_PATH}' AS spawns_db;")
+        cur.execute(f"ATTACH DATABASE '{config.SPAWns_DB_PATH}' AS spawns_db;")
 
-        query = """
+        query = f"""
             SELECT
                 ge.worldTime,
                 ge.causerName,
@@ -66,7 +69,7 @@ async def process_server_kills(channel_id, saved_path, db_pattern, last_event_fi
             FROM
                 game_events ge
             WHERE
-                ge.worldTime > ? AND ge.eventType = 103
+                ge.worldTime > ? AND ge.eventType = {DEATH_EVENT_TYPE}
             ORDER BY
                 ge.worldTime ASC
         """
@@ -79,21 +82,21 @@ async def process_server_kills(channel_id, saved_path, db_pattern, last_event_fi
                 continue
 
             if killer_name:
-                message = f"💀 **{killer_name}** eliminou **{victim_name}**!"
+                message = f"💀 **{killer_name}** killed **{victim_name}**!"
             else:
-                npc_name = "ambiente"  # Default value
+                npc_name = "the environment"  # Default value
                 if non_persistent_causer:
                     # Query the attached spawns database to get the NPC name
                     npc_query = "SELECT Name FROM spawns_db.spawns WHERE RowName = ?"
                     npc_row = cur.execute(npc_query, (non_persistent_causer,)).fetchone()
                     if npc_row:
                         npc_name = npc_row[0]
-                message = f"☠️ **{victim_name}** foi morto por **{npc_name}**!"
+                message = f"☠️ **{victim_name}** was killed by **{npc_name}**!"
 
             embed = discord.Embed(description=message, color=discord.Color.dark_red())
             timestamp_obj = datetime.fromtimestamp(event_time)
-            formatted_time = timestamp_obj.strftime("%d/%m/%Y às %H:%M:%S")
-            embed.set_footer(text=f"Ocorrido em: {formatted_time}")
+            formatted_time = timestamp_obj.strftime("%d/%m/%Y at %H:%M:%S")
+            embed.set_footer(text=f"Occurred on: {formatted_time}")
 
             await killfeed_channel.send(embed=embed)
 
@@ -106,13 +109,13 @@ async def process_server_kills(channel_id, saved_path, db_pattern, last_event_fi
             set_last_event_time(new_max_time, last_event_file)
 
     except sqlite3.Error as e:
-        print(f"ERRO [{server_name}]: Erro no Killfeed (SQLite): {e}")
+        print(f"ERROR [{server_name}]: Killfeed error (SQLite): {e}")
     except Exception as e:
-        print(f"ERRO [{server_name}]: Erro inesperado no Killfeed: {e}")
+        print(f"ERROR [{server_name}]: Unexpected Killfeed error: {e}")
 
 # --- Looping Tasks for Each Server ---
 
-@tasks.loop(seconds=20)
+@tasks.loop(seconds=config.EXILED_LANDS_POLL_INTERVAL)
 async def check_exiled_lands_kills():
     await process_server_kills(
         channel_id=config.KILLFEED_CHANNEL_ID,
@@ -122,7 +125,7 @@ async def check_exiled_lands_kills():
         server_name="Exiled Lands"
     )
 
-@tasks.loop(seconds=25)
+@tasks.loop(seconds=config.SIPTAH_POLL_INTERVAL)
 async def check_siptah_kills():
     await process_server_kills(
         channel_id=config.SIPTAH_KILLFEED_CHANEL_ID,
@@ -144,7 +147,7 @@ async def before_check_siptah_kills():
 
 @bot.event
 async def on_ready():
-    print(f'Bot de Killfeed conectado como {bot.user}')
+    print(f'Killfeed bot connected as {bot.user}')
     print('---------------------------------')
     check_exiled_lands_kills.start()
     check_siptah_kills.start()
