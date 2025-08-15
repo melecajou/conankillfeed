@@ -58,7 +58,7 @@ async def process_server_kills(channel_id, saved_path, db_pattern, last_event_fi
         cur = con.cursor()
 
         # Attach the shared spawns database
-        cur.execute(f"ATTACH DATABASE '{config.SPAWns_DB_PATH}' AS spawns_db;")
+        cur.execute(f"ATTACH DATABASE '{config.SPAWNS_DB_PATH}' AS spawns_db;")
 
         query = f"""
             SELECT
