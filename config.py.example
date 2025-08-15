@@ -1,0 +1,9 @@
+# Para o Bot de Killfeed (killfeed_bot.py)
+KILLFEED_BOT_TOKEN = "YOUR_DISCORD_BOT_TOKEN_HERE"
+KILLFEED_CHANNEL_ID = 123456789012345678
+SIPTAH_KILLFEED_CHANEL_ID = 123456789012345678
+CONAN_SAVED_PATH = "/path/to/your/conan/saved/folder/"
+SIPTAH_SAVED_PATH = "/path/to/your/siptah/saved/folder/"
+LAST_EVENT_TIME_FILE = "/path/to/your/last_event_time.txt"
+SIPTAH_LAST_EVENT_TIME_FILE = "/path/to/your/siptah_last_event_time.txt"
+SPAWNS_DB_PATH = "/path/to/your/spawns.db"

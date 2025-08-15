@@ -1,0 +1,12 @@
+# Configuration files
+config.py
+
+# Database files
+spawns.db
+
+# State files
+*.txt
+
+# Python cache
+__pycache__/
+*.pyc
