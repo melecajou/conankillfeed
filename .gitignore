@@ -2,7 +2,6 @@
 config.py
 
 # Database files
-spawns.db
 
 # State files
 *.txt
