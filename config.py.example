@@ -1,19 +1,53 @@
 # Killfeed Bot Configuration (killfeed_bot.py)
 KILLFEED_BOT_TOKEN = "YOUR_DISCORD_BOT_TOKEN_HERE"
 
-# --- Channel and Path Settings ---
-KILLFEED_CHANNEL_ID = 123456789012345678
-SIPTAH_KILLFEED_CHANEL_ID = 123456789012345678
-CONAN_SAVED_PATH = "/path/to/your/conan/saved/folder/"
-SIPTAH_SAVED_PATH = "/path/to/your/siptah/saved/folder/"
-LAST_EVENT_TIME_FILE = "/path/to/your/last_event_time.txt"
-SIPTAH_LAST_EVENT_TIME_FILE = "/path/to/your/siptah_last_event_time.txt"
+# --- Database Paths ---
+RANKING_DB_PATH = "/home/steam/bots/Killfeed/ranking.db"
 SPAWNS_DB_PATH = "/path/to/your/spawns.db"
 
-# --- Bot Behavior Settings ---
-# Set to True to only post player vs. player deaths, False to post all deaths (PvP and PvE)
-PVP_ONLY_DEATHS = False
+# --- Bot Behavior ---
+# A dictionary mapping a server's name to a boolean.
+# True = Post only PvP deaths. False = Post all deaths.
+PVP_ONLY_DEATHS = {
+    "Exiled Lands": False,
+    "Siptah": False,
+    # "PvP": True,
+}
 
-# How often (in seconds) to check for new kills on each server
-EXILED_LANDS_POLL_INTERVAL = 20
-SIPTAH_POLL_INTERVAL = 25
+# --- Server Configurations ---
+# This is a list of dictionaries, where each dictionary represents a server you want to monitor.
+SERVERS = [
+    {
+        "name": "Exiled Lands",
+        "enabled": True,
+        "channel_id": 123456789012345678,
+        "ranking_channel_id": 123456789012345679, # Channel for the auto-updating ranking message
+        "saved_path": "/path/to/your/conan/saved/folder/",
+        "db_pattern": "game_backup_*.db",
+        "last_event_file": "/path/to/your/last_event_time.txt",
+        "poll_interval": 20, # How often to check for new kills
+        "ranking_update_interval": 300, # How often (in seconds) to update the ranking message
+    },
+    {
+        "name": "Siptah",
+        "enabled": True,
+        "channel_id": 123456789012345680,
+        "ranking_channel_id": 123456789012345681,
+        "saved_path": "/path/to/your/siptah/saved/folder/",
+        "db_pattern": "dlc_siptah_backup_*.db",
+        "last_event_file": "/path/to/your/siptah_last_event_time.txt",
+        "poll_interval": 25,
+        "ranking_update_interval": 300,
+    },
+    # {
+    #     "name": "PvP",
+    #     "enabled": True,
+    #     "channel_id": 123456789012345682,
+    #     "ranking_channel_id": 123456789012345683,
+    #     "saved_path": "/path/to/your/pvp/saved/folder/",
+    #     "db_pattern": "game_backup_*.db",
+    #     "last_event_file": "/path/to/your/pvp_last_event_time.txt",
+    #     "poll_interval": 20,
+    #     "ranking_update_interval": 300,
+    # },
+]

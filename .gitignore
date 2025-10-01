@@ -5,9 +5,11 @@ config.py
 venv/
 
 # Database files
+*.db
 
 # State files
 *.txt
+*.json
 
 # Python cache
 __pycache__/

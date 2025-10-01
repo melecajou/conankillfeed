@@ -4,35 +4,28 @@
 # it under the terms of the GNU General Public License as published by
 # the Free Software Foundation, either version 3 of the License, or
 # (at your option) any later version.
-#
-# This program is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
-# GNU General Public License for more details.
-#
-# You should have received a copy of the GNU General Public License
-# along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 import discord
-from discord.ext import commands, tasks
+from discord.ext import tasks
 import sqlite3
 import os
 import glob
 from datetime import datetime
+import json
 import config
 
 # --- Constants ---
 DEATH_EVENT_TYPE = 103
+RANKING_STATE_FILE = "/home/steam/bots/Killfeed/ranking_state.json"
 
-# --- Intents and Bot Initialization ---
+# --- Bot Initialization ---
+# No special intents are needed as the bot only sends messages and does not read content.
 intents = discord.Intents.default()
-intents.message_content = True
-bot = commands.Bot(command_prefix='!killfeed', intents=intents)
+bot = discord.Client(intents=intents)
 
 # --- Helper Functions ---
 
 def get_last_event_time(file_path):
-    """Reads the last processed event time from a given file."""
     try:
         with open(file_path, 'r') as f:
             return int(f.read().strip())
@@ -40,132 +33,173 @@ def get_last_event_time(file_path):
         return 0
 
 def set_last_event_time(new_time, file_path):
-    """Writes the new last processed event time to a given file."""
     with open(file_path, 'w') as f:
         f.write(str(new_time))
 
 def find_latest_db_backup(search_path, db_pattern):
-    """Finds the most recently modified database file in a given path matching a pattern."""
     list_of_files = glob.glob(os.path.join(search_path, db_pattern))
     return max(list_of_files, key=os.path.getmtime) if list_of_files else None
 
-# --- Core Killfeed Logic ---
-
-async def process_server_kills(channel_id, saved_path, db_pattern, last_event_file, server_name):
-    """
-    Generic function to check for new kills for a specific server and post them to Discord.
-    """
-    killfeed_channel = bot.get_channel(channel_id)
-    if not killfeed_channel:
-        print(f"ERROR [{server_name}]: Killfeed channel with ID {channel_id} not found.")
-        return
-
-    db_path = find_latest_db_backup(saved_path, db_pattern)
-    if not db_path:
-        # This is a common case if the server hasn't created a backup yet, so no error message needed.
-        return
-
-    last_time = get_last_event_time(last_event_file)
-    new_max_time = last_time
-
+def load_ranking_state():
     try:
-        con = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
-        cur = con.cursor()
+        with open(RANKING_STATE_FILE, 'r') as f:
+            return json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        return {}
 
-        # Attach the shared spawns database
-        cur.execute(f"ATTACH DATABASE '{config.SPAWNS_DB_PATH}' AS spawns_db;")
+def save_ranking_state(state):
+    with open(RANKING_STATE_FILE, 'w') as f:
+        json.dump(state, f, indent=4)
 
-        query = f"""
-            SELECT
-                ge.worldTime,
-                ge.causerName,
-                ge.ownerName,
-                json_extract(ge.argsMap, '$.nonPersistentCauser') AS nonPersistentCauser
-            FROM
-                game_events ge
-            WHERE
-                ge.worldTime > ? AND ge.eventType = {DEATH_EVENT_TYPE}
-            ORDER BY
-                ge.worldTime ASC
-        """
+# --- Server Monitor Class ---
 
-        for row in cur.execute(query, (last_time,)):
-            event_time, killer_name, victim_name, non_persistent_causer = row
+class ServerMonitor:
+    def __init__(self, server_config):
+        self.config = server_config
+        self.name = self.config['name']
 
-            # If PvP only is enabled, skip events where there is no player killer
-            if config.PVP_ONLY_DEATHS and not killer_name:
-                continue
+        # Dynamically create the tasks with the correct intervals
+        self.kill_check_task = tasks.loop(seconds=self.config['poll_interval'])(self.process_server_kills)
+        self.ranking_update_task = tasks.loop(seconds=self.config['ranking_update_interval'])(self.update_ranking_message)
 
-            if killer_name:
-                message = f"💀 **{killer_name}** killed **{victim_name}**!"
+    def start_tasks(self):
+        """Starts the monitoring tasks for this server."""
+        self.kill_check_task.start()
+        self.ranking_update_task.start()
+
+    async def update_player_score(self, killer_name, victim_name):
+        try:
+            con = sqlite3.connect(config.RANKING_DB_PATH)
+            cur = con.cursor()
+            # Killer
+            cur.execute("INSERT OR IGNORE INTO scores (server_name, player_name) VALUES (?, ?)", (self.name, killer_name))
+            cur.execute("UPDATE scores SET kills = kills + 1, score = score + 1 WHERE server_name = ? AND player_name = ?", (self.name, killer_name))
+            # Victim
+            cur.execute("INSERT OR IGNORE INTO scores (server_name, player_name) VALUES (?, ?)", (self.name, victim_name))
+            cur.execute("UPDATE scores SET deaths = deaths + 1, score = score - 1 WHERE server_name = ? AND player_name = ?", (self.name, victim_name))
+            con.commit()
+            con.close()
+        except sqlite3.Error as e:
+            print(f"ERROR [Ranking - {self.name}]: Failed to update score for {killer_name}/{victim_name}: {e}")
+
+    async def process_server_kills(self):
+        try:
+            await bot.wait_until_ready()
+            killfeed_channel = bot.get_channel(self.config['channel_id'])
+            if not killfeed_channel:
+                # This can happen on startup, so we don't need a loud error.
+                return
+
+            db_path = find_latest_db_backup(self.config['saved_path'], self.config['db_pattern'])
+            if not db_path:
+                return
+
+            last_time = get_last_event_time(self.config['last_event_file'])
+            new_max_time = last_time
+
+            con = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
+            cur = con.cursor()
+            cur.execute(f"ATTACH DATABASE '{config.SPAWNS_DB_PATH}' AS spawns_db;")
+
+            query = f"SELECT ge.worldTime, ge.causerName, ge.ownerName, json_extract(ge.argsMap, '$.nonPersistentCauser') AS npc FROM game_events ge WHERE ge.worldTime > ? AND ge.eventType = {DEATH_EVENT_TYPE} ORDER BY ge.worldTime ASC"
+
+            for event_time, killer, victim, npc_id in cur.execute(query, (last_time,)):
+                is_pvp_kill = killer and victim and killer != victim
+
+                if is_pvp_kill:
+                    await self.update_player_score(killer, victim)
+
+                pvp_only = config.PVP_ONLY_DEATHS.get(self.name, False)
+                if pvp_only and not is_pvp_kill:
+                    continue
+
+                if is_pvp_kill:
+                    message = f"💀 **{killer}** killed **{victim}**!"
+                elif victim:
+                    npc_name = "the environment"
+                    if npc_id:
+                        npc_row = cur.execute("SELECT Name FROM spawns_db.spawns WHERE RowName = ?", (npc_id,)).fetchone()
+                        if npc_row: npc_name = npc_row[0]
+                    message = f"☠️ **{victim}** was killed by **{npc_name}**!"
+                else:
+                    continue
+
+                embed = discord.Embed(description=message, color=discord.Color.dark_red())
+                embed.set_footer(text=f"Occurred on: {datetime.fromtimestamp(event_time).strftime('%d/%m/%Y at %H:%M:%S')}")
+                await killfeed_channel.send(embed=embed)
+
+                if event_time > new_max_time:
+                    new_max_time = event_time
+
+            con.close()
+            if new_max_time > last_time:
+                set_last_event_time(new_max_time, self.config['last_event_file'])
+        except Exception as e:
+            print(f"ERROR in process_server_kills for {self.name} ({type(e).__name__}): {e}")
+
+    async def update_ranking_message(self):
+        try:
+            await bot.wait_until_ready()
+            ranking_channel = bot.get_channel(self.config['ranking_channel_id'])
+            if not ranking_channel:
+                return
+
+            con = sqlite3.connect(config.RANKING_DB_PATH)
+            cur = con.cursor()
+            cur.execute("SELECT player_name, kills, deaths, score FROM scores WHERE server_name = ? ORDER BY score DESC, kills DESC LIMIT 10", (self.name,))
+            top_players = cur.fetchall()
+            con.close()
+
+            embed = discord.Embed(title=f"🏆 PvP Ranking: {self.name}", color=discord.Color.gold())
+            if not top_players:
+                embed.description = "No PvP ranking data available yet."
             else:
-                npc_name = "the environment"  # Default value
-                if non_persistent_causer:
-                    # Query the attached spawns database to get the NPC name
-                    npc_query = "SELECT Name FROM spawns_db.spawns WHERE RowName = ?"
-                    npc_row = cur.execute(npc_query, (non_persistent_causer,)).fetchone()
-                    if npc_row:
-                        npc_name = npc_row[0]
-                message = f"☠️ **{victim_name}** was killed by **{npc_name}**!"
+                description = ""
+                for i, (player, kills, deaths, score) in enumerate(top_players, 1):
+                    rank_emoji = {1: '🥇', 2: '🥈', 3: '🥉'}.get(i, f'**#{i}**')
+                    description += f"{rank_emoji} **{player}** - Score: {score} (K: {kills} / D: {deaths})\n"
+                embed.description = description
+            embed.set_footer(text=f"Last updated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
 
-            embed = discord.Embed(description=message, color=discord.Color.dark_red())
-            timestamp_obj = datetime.fromtimestamp(event_time)
-            formatted_time = timestamp_obj.strftime("%d/%m/%Y at %H:%M:%S")
-            embed.set_footer(text=f"Occurred on: {formatted_time}")
+            state = load_ranking_state()
+            message_id = state.get(self.name)
 
-            await killfeed_channel.send(embed=embed)
-
-            if event_time > new_max_time:
-                new_max_time = event_time
-
-        con.close()
-
-        if new_max_time > last_time:
-            set_last_event_time(new_max_time, last_event_file)
-
-    except sqlite3.Error as e:
-        print(f"ERROR [{server_name}]: Killfeed error (SQLite): {e}")
-    except Exception as e:
-        print(f"ERROR [{server_name}]: Unexpected Killfeed error: {e}")
-
-# --- Looping Tasks for Each Server ---
-
-@tasks.loop(seconds=config.EXILED_LANDS_POLL_INTERVAL)
-async def check_exiled_lands_kills():
-    await process_server_kills(
-        channel_id=config.KILLFEED_CHANNEL_ID,
-        saved_path=config.CONAN_SAVED_PATH,
-        db_pattern='game_backup_*.db',
-        last_event_file=config.LAST_EVENT_TIME_FILE,
-        server_name="Exiled Lands"
-    )
-
-@tasks.loop(seconds=config.SIPTAH_POLL_INTERVAL)
-async def check_siptah_kills():
-    await process_server_kills(
-        channel_id=config.SIPTAH_KILLFEED_CHANEL_ID,
-        saved_path=config.SIPTAH_SAVED_PATH,
-        db_pattern='dlc_siptah_backup_*.db',
-        last_event_file=config.SIPTAH_LAST_EVENT_TIME_FILE,
-        server_name="Siptah"
-    )
+            if message_id:
+                try:
+                    message = await ranking_channel.fetch_message(message_id)
+                    await message.edit(embed=embed)
+                    return
+                except discord.NotFound:
+                    print(f"INFO [{self.name}]: Ranking message not found. Creating a new one.")
+            
+            new_message = await ranking_channel.send(embed=embed)
+            state[self.name] = new_message.id
+            save_ranking_state(state)
+        except Exception as e:
+            print(f"ERROR in update_ranking_message for {self.name} ({type(e).__name__}): {e}")
 
 # --- Bot Events ---
-
-@check_exiled_lands_kills.before_loop
-async def before_check_exiled_lands_kills():
-    await bot.wait_until_ready()
-
-@check_siptah_kills.before_loop
-async def before_check_siptah_kills():
-    await bot.wait_until_ready()
 
 @bot.event
 async def on_ready():
     print(f'Killfeed bot connected as {bot.user}')
     print('---------------------------------')
-    check_exiled_lands_kills.start()
-    check_siptah_kills.start()
+    
+    if not hasattr(config, 'SERVERS') or not config.SERVERS:
+        print("ERROR: SERVERS configuration is missing or empty in config.py.")
+        return
+
+    for server_config in config.SERVERS:
+        if server_config.get("enabled", True):
+            print(f"Initializing monitor for server: {server_config['name']}")
+            monitor = ServerMonitor(server_config)
+            monitor.start_tasks()
+        else:
+            print(f"Skipping disabled server: {server_config['name']}")
 
 # --- Run Bot ---
-bot.run(config.KILLFEED_BOT_TOKEN)
+if __name__ == "__main__":
+    try:
+        bot.run(config.KILLFEED_BOT_TOKEN)
+    except Exception as e:
+        print(f"FATAL: An error occurred while running the bot: {e}")

@@ -6,19 +6,22 @@ The bot supports multiple servers (e.g., Exiled Lands and Isle of Siptah) and po
 
 ## Features
 
-- Real-time death notifications extracted directly from the game database.
-- Identifies whether the killer was a player or an NPC.
-- Support for multiple servers/maps with dedicated Discord channels.
-- Simple configuration through a single file.
+- Real-time death notifications from the game database.
+- **Auto-Updating PvP Ranking:** A persistent leaderboard message that updates automatically.
+- Identifies player vs. player (PvP) and player vs. environment (PvE) kills.
+- **Scalable Multi-Server Support:** Easily configure any number of servers.
 - Tracks the last read event to avoid duplicate messages after restarts.
+
+## Commands
+
+There are no commands. The ranking leaderboard is now a persistent message that updates automatically.
 
 ## Prerequisites
 
 - Python 3.6 or higher.
 - `discord.py` library (`pip install discord.py`).
-- A Discord Bot and its Token. [Guide to creating a Bot](https://discordpy.readthedocs.io/en/stable/discord.html)
-- Direct access to the Conan Exiles server's `Saved` directory, where the database backups (`game_backup_*.db`) are stored.
-- The `spawns.db` database file is included to map NPC IDs to their names.
+- A Discord Bot and its Token.
+- Direct access to the Conan Exiles server's `Saved` directory.
 
 ## Installation and Configuration
 
@@ -29,40 +32,47 @@ The bot supports multiple servers (e.g., Exiled Lands and Isle of Siptah) and po
     ```
 
 2.  **Create a Virtual Environment & Install Dependencies**
-    It's highly recommended to run the bot in a Python virtual environment.
-
     ```bash
-    # Create a virtual environment named 'venv'
     python3 -m venv venv
-
-    # Activate the environment
     source venv/bin/activate
-
-    # Install the required library
     pip install discord.py
-
-    # To deactivate later, simply type 'deactivate'
     ```
 
 3.  **Create the Configuration File**
-    Copy the example file to create your own configuration file.
     ```bash
     cp config.py.example config.py
     ```
 
-4.  **Edit the `config.py` File**
-    Open the `config.py` file and fill in the variables with your information.
+4.  **Run the Backfill Script (First Time Only)**
+    To populate the ranking with your server's history, run the backfill script for each configured server.
+    ```bash
+    # Make sure your config.py is set up before running this!
+    python3 backfill_ranking.py "Your Server Name"
+    ```
 
-    - `KILLFEED_BOT_TOKEN`: Your Discord bot's token. **Keep this secret!**
-    - `KILLFEED_CHANNEL_ID`: The ID of the Discord channel where deaths from the main map (Exiled Lands) will be sent.
-    - `SIPTAH_KILLFEED_CHANEL_ID`: The channel ID for deaths from the Siptah map.
-    - `CONAN_SAVED_PATH`: The absolute path to the `Saved` directory of your main server installation.
-      - Example: `/home/steam/conan_exiles/ConanSandbox/Saved/`
-    - `SIPTAH_SAVED_PATH`: The absolute path to the `Saved` directory of your Siptah server.
-    - `LAST_EVENT_TIME_FILE`: Path to the file that stores the timestamp of the last read event for the main server. You can leave the default.
-    - `SIPTAH_LAST_EVENT_TIME_FILE`: Path to the timestamp file for the Siptah server. You can leave the default.
-    - `SPAWNS_DB_PATH`: Path to the `spawns.db` database. This file is required to identify NPCs.
-    - `PVP_ONLY_DEATHS`: Set to `True` to only post player vs. player deaths, or `False` to post all deaths (PvP and PvE).
+5.  **Edit the `config.py` File**
+    Open `config.py` and fill in the variables.
+
+    - `KILLFEED_BOT_TOKEN`: Your Discord bot's token.
+    - `RANKING_DB_PATH`: Path to the ranking database file.
+    - `SPAWNS_DB_PATH`: Path to the `spawns.db` file.
+    - `PVP_ONLY_DEATHS`: A dictionary to control PvP-only death reporting per server.
+    - `SERVERS`: A list of dictionaries, one for each server.
+
+      **Server Configuration Example:**
+      ```python
+      {
+          "name": "Exiled Lands",
+          "enabled": True,
+          "channel_id": 12345, // For kill announcements
+          "ranking_channel_id": 67890, // For the auto-updating leaderboard
+          "saved_path": "/path/to/conan/saved/",
+          "db_pattern": "game_backup_*.db",
+          "last_event_file": "/path/to/last_event.txt",
+          "poll_interval": 20, // How often to check for kills (seconds)
+          "ranking_update_interval": 300, // How often to update the ranking (seconds)
+      }
+      ```
 
     **How to get a Discord Channel ID:**
     - In Discord, go to `User Settings` > `Advanced` and enable `Developer Mode`.
@@ -76,7 +86,7 @@ To ensure the bot runs continuously, starts on boot, and restarts automatically 
 
     Create a file named `killfeed.service` in `/etc/systemd/system/` using a text editor like `nano`:
     ```bash
-    sudo nano /etc/systemd/system/killfeed.service
+    sudo nano /etc/systemd/system/killfeed_bot.service
     ```
 
 2.  **Add the Service Configuration**
@@ -111,15 +121,15 @@ To ensure the bot runs continuously, starts on boot, and restarts automatically 
     After saving the file, reload the `systemd` daemon, enable the service to start on boot, and then start it immediately.
     ```bash
     sudo systemctl daemon-reload
-    sudo systemctl enable killfeed.service
-    sudo systemctl start killfeed.service
+    sudo systemctl enable killfeed_bot.service
+    sudo systemctl start killfeed_bot.service
     ```
 
 4.  **Check the Status**
 
     You can check if the bot is running correctly and see its latest logs with:
     ```bash
-    sudo systemctl status killfeed.service
+    sudo systemctl status killfeed_bot.service
     ```
 
 ## How It Works
