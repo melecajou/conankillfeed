@@ -128,7 +128,7 @@ class ServerMonitor:
                     continue
 
                 embed = discord.Embed(description=message, color=discord.Color.dark_red())
-                embed.set_footer(text=f"Occurred on: {datetime.fromtimestamp(event_time).strftime('%d/%m/%Y at %H:%M:%S')}")
+                embed.set_footer(text=f"📍 {self.name} | {datetime.fromtimestamp(event_time).strftime('%d/%m/%Y at %H:%M:%S')}")
                 await killfeed_channel.send(embed=embed)
 
                 if event_time > new_max_time:
