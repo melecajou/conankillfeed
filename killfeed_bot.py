@@ -37,7 +37,10 @@ def set_last_event_time(new_time, file_path):
         f.write(str(new_time))
 
 def find_latest_db_backup(search_path, db_pattern):
-    list_of_files = glob.glob(os.path.join(search_path, db_pattern))
+    """Finds the most recently modified database file, ignoring temporary files."""
+    # Ensure we only match files that end with .db, not .db.tmp or similar.
+    pattern = os.path.join(search_path, db_pattern.replace("*.db", "*.db"))
+    list_of_files = [f for f in glob.glob(pattern) if not f.endswith('.tmp')]
     return max(list_of_files, key=os.path.getmtime) if list_of_files else None
 
 def load_ranking_state():
@@ -178,6 +181,85 @@ class ServerMonitor:
         except Exception as e:
             print(f"ERROR in update_ranking_message for {self.name} ({type(e).__name__}): {e}")
 
+class UnifiedRankingMonitor:
+    def __init__(self, unified_config):
+        self.config = unified_config
+        self.title = self.config['title']
+        # Identifier for state file (to save message ID)
+        self.state_id = f"UNIFIED_{self.title}" 
+        
+        self.update_task = tasks.loop(seconds=self.config['update_interval'])(self.update_ranking_message)
+
+    def start_task(self):
+        self.update_task.start()
+
+    async def update_ranking_message(self):
+        try:
+            await bot.wait_until_ready()
+            ranking_channel = bot.get_channel(self.config['channel_id'])
+            if not ranking_channel:
+                return
+
+            servers_to_include = self.config.get('servers_to_include', [])
+            if not servers_to_include:
+                # If list is empty, maybe they want all servers? Or none. 
+                # Safer to assume none or require explicit configuration.
+                return
+
+            # Construct the placeholders for the IN clause
+            placeholders = ', '.join('?' for _ in servers_to_include)
+            
+            query = f"""
+                SELECT 
+                    player_name, 
+                    SUM(kills) as total_kills, 
+                    SUM(deaths) as total_deaths, 
+                    SUM(score) as total_score 
+                FROM scores 
+                WHERE server_name IN ({placeholders}) 
+                GROUP BY player_name 
+                ORDER BY total_score DESC, total_kills DESC 
+                LIMIT 10
+            """
+
+            con = sqlite3.connect(config.RANKING_DB_PATH)
+            cur = con.cursor()
+            cur.execute(query, servers_to_include)
+            top_players = cur.fetchall()
+            con.close()
+
+            embed = discord.Embed(title=self.title, color=discord.Color.purple())
+            if not top_players:
+                embed.description = "No unified ranking data available yet."
+            else:
+                description = ""
+                for i, (player, kills, deaths, score) in enumerate(top_players, 1):
+                    rank_emoji = {1: '🥇', 2: '🥈', 3: '🥉'}.get(i, f'**#{i}**')
+                    description += f"{rank_emoji} **{player}** - Score: {score} (K: {kills} / D: {deaths})\n"
+                embed.description = description
+            
+            footer_text = f"Last updated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} | Servers: {', '.join(servers_to_include)}"
+            embed.set_footer(text=footer_text)
+
+            state = load_ranking_state()
+            message_id = state.get(self.state_id)
+
+            if message_id:
+                try:
+                    message = await ranking_channel.fetch_message(message_id)
+                    await message.edit(embed=embed)
+                    return
+                except discord.NotFound:
+                    print(f"INFO [Unified - {self.title}]: Ranking message not found. Creating a new one.")
+            
+            new_message = await ranking_channel.send(embed=embed)
+            state[self.state_id] = new_message.id
+            save_ranking_state(state)
+
+        except Exception as e:
+            print(f"ERROR in UnifiedRankingMonitor ({self.title}) ({type(e).__name__}): {e}")
+
+
 # --- Bot Events ---
 
 @bot.event
@@ -196,6 +278,16 @@ async def on_ready():
             monitor.start_tasks()
         else:
             print(f"Skipping disabled server: {server_config['name']}")
+
+    # Initialize Unified Rankings if configured
+    if hasattr(config, 'UNIFIED_RANKINGS') and config.UNIFIED_RANKINGS:
+        for unified_config in config.UNIFIED_RANKINGS:
+            if unified_config.get("enabled", True):
+                print(f"Initializing Unified Ranking: {unified_config['title']}")
+                unified_monitor = UnifiedRankingMonitor(unified_config)
+                unified_monitor.start_task()
+            else:
+                print(f"Skipping disabled unified ranking: {unified_config['title']}")
 
 # --- Run Bot ---
 if __name__ == "__main__":

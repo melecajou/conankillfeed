@@ -14,6 +14,19 @@ PVP_ONLY_DEATHS = {
     # "PvP": True,
 }
 
+# --- Unified Ranking Configuration (Optional) ---
+# Create unified leaderboards that aggregate scores from multiple servers.
+# Useful for clusters where players travel between maps.
+# UNIFIED_RANKINGS = [
+#     {
+#         "enabled": True,
+#         "title": "🏆 Cluster Ranking (All Servers)",
+#         "channel_id": 123456789012345684, # Dedicated channel for this ranking
+#         "servers_to_include": ["Exiled Lands", "Siptah"], # Must match "name" in SERVERS list
+#         "update_interval": 300, # Update every 5 minutes
+#     }
+# ]
+
 # --- Server Configurations ---
 # This is a list of dictionaries, where each dictionary represents a server you want to monitor.
 SERVERS = [
