@@ -68,14 +68,25 @@ def backfill_ranking(server_name):
         game_cur = game_con.cursor()
 
         query = f"""
-            SELECT causerName, ownerName
+            SELECT worldTime, causerName, ownerName
             FROM game_events
             WHERE eventType = {DEATH_EVENT_TYPE}
+            ORDER BY worldTime ASC
         """
 
         print("Processing kill events...")
         count = 0
-        for killer_name, victim_name in game_cur.execute(query):
+        last_death_times = {}
+
+        for event_time, killer_name, victim_name in game_cur.execute(query):
+            # Duplicate check
+            if victim_name:
+                if victim_name in last_death_times:
+                    if event_time - last_death_times[victim_name] < 10:
+                        # print(f"Skipping duplicate death for {victim_name}")
+                        continue
+                last_death_times[victim_name] = event_time
+
             # We only care about PvP kills where both parties are named players
             if killer_name and victim_name and killer_name != victim_name:
                 update_player_score(ranking_cur, server_config['name'], killer_name, is_kill=True)

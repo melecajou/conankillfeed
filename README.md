@@ -10,6 +10,7 @@ The bot supports multiple servers (e.g., Exiled Lands and Isle of Siptah) and po
 - **Auto-Updating PvP Ranking:** A persistent leaderboard message that updates automatically.
 - Identifies player vs. player (PvP) and player vs. environment (PvE) kills.
 - **Scalable Multi-Server Support:** Easily configure any number of servers.
+- **Smart Filtering:** Ignores duplicate death events occurring within 10 seconds (e.g., from game bugs) to ensure accurate ranking.
 - Tracks the last read event to avoid duplicate messages after restarts.
 
 ## Commands

@@ -65,6 +65,9 @@ class ServerMonitor:
         self.kill_check_task = tasks.loop(seconds=self.config['poll_interval'])(self.process_server_kills)
         self.ranking_update_task = tasks.loop(seconds=self.config['ranking_update_interval'])(self.update_ranking_message)
 
+        # Track last death time per victim to filter duplicates
+        self.last_death_times = {}
+
     def start_tasks(self):
         """Starts the monitoring tasks for this server."""
         self.kill_check_task.start()
@@ -107,6 +110,13 @@ class ServerMonitor:
             query = f"SELECT ge.worldTime, ge.causerName, ge.ownerName, json_extract(ge.argsMap, '$.nonPersistentCauser') AS npc FROM game_events ge WHERE ge.worldTime > ? AND ge.eventType = {DEATH_EVENT_TYPE} ORDER BY ge.worldTime ASC"
 
             for event_time, killer, victim, npc_id in cur.execute(query, (last_time,)):
+                if victim:
+                    if victim in self.last_death_times:
+                        if event_time - self.last_death_times[victim] < 10:
+                            print(f"INFO [{self.name}]: Skipping duplicate death for {victim} (Diff: {event_time - self.last_death_times[victim]}s)")
+                            continue
+                    self.last_death_times[victim] = event_time
+
                 is_pvp_kill = killer and victim and killer != victim
 
                 if is_pvp_kill:
